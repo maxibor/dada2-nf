@@ -1,5 +1,8 @@
 #!/usr/bin/env nextflow
 
+version = "0.2"
+version_date = "September 16th, 2019"
+
 def helpMessage() {
     log.info"""
      megahit-nf: simple Megahit assembler Nextflow pipeline
@@ -39,7 +42,7 @@ log.info "========================================="
 def summary = [:]
 summary['Reads'] = params.reads
 summary['phred quality'] = params.phred
-summary['Paired end'] = params.paired_end
+summary['Paired end'] = params.pairedEnd
 summary['Silva DB'] = params.silva_db
 summary['Silva species DB'] = params.silva_specie_db
 log.info summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
@@ -55,7 +58,7 @@ Channel
 process AdapterRemoval {
     tag "$name"
 
-    label 'expresso'
+    label 'adaprem'
 
     input:
         set val(name), file(reads) from reads_to_trim
@@ -67,7 +70,7 @@ process AdapterRemoval {
     script:
         out1 = name+".pair1.trimmed.fastq"
         out2 = name+".pair2.trimmed.fastq"
-        
+        se_out = name+".trimmed.fastq"
         non_col1 = name+".discarded.1.fq"
         non_col2 = name+".discarded.2.fq"
         settings = name+".settings"
@@ -75,8 +78,7 @@ process AdapterRemoval {
             """
             AdapterRemoval --basename $name --file1 ${reads[0]} --file2 ${reads[1]} --trimns --trimqualities --maxns 0 --minquality 20 --minlength 30 --output1 $out1 --output2 $out2 --threads ${task.cpus} --qualitybase ${params.phred} --settings $settings
             """
-        } else {
-            se_out = name+".trimmed.fastq"
+        } else {  
             """
             AdapterRemoval --basename $name --file1 ${reads[0]} --trimns --trimqualities --minquality 20 --maxns 0 --minlength 30 --output1 $se_out --threads ${task.cpus} --qualitybase ${params.phred} --settings $settings
             """
@@ -86,9 +88,7 @@ process AdapterRemoval {
 process dada2 {
     tag "$name"
 
-    conda params.dada_env
-
-    label 'intenso'
+    label 'dada'
 
     publishDir "${params.results}/dada", mode: 'copy'
 
@@ -96,9 +96,11 @@ process dada2 {
         set val(name), file(fq) from trimmed_reads
     output:
         set val(name), file("*.dada2.csv") into dada_out
+        set val(name), file("*.read_count.csv") into dada_read_count_table
     script:
         outname = name+".dada2.csv"
-        if params.pairedEnd {
+        read_count_name = name+".read_count.csv"
+        if (params.pairedEnd) {
             """
             #!/usr/bin/env Rscript
             
@@ -141,16 +143,22 @@ process dada2 {
             track <- cbind(getN(dadaFs), getN(dadaRs), getN(mergers), rowSums(seqtab.nochim))
             colnames(track) <- c("denoisedF", "denoisedR", "merged", "nonchim")
             rownames(track) <- sample.name
-            write_csv(track, paste0(c(sample.name,'.read_count.csv')))
+            write.csv(track, "${read_count_name}")
 
             # Assign taxonomy 
-            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, multithread=${task.cpus}, tryRC=TRUE)
+            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, multithread=${task.cpus})
 
             # Assign species 
             taxa = addSpecies(taxtab = taxa, refFasta = silva_specie_db)
             
             # Write results to disk 
-            write.csv(count(taxa), "$outname")
+            print(taxa)
+
+            spec_count = table(paste(as.data.frame(taxa)[,"Genus"], as.data.frame(taxa)[,"Species"]))
+
+            print(spec_count)
+
+            write.csv(spec_count, "$outname")
             """
         } else {
             """
@@ -188,16 +196,18 @@ process dada2 {
             track <- cbind(getN(dadaFs), rowSums(seqtab.nochim))
             colnames(track) <- c("denoisedF", "nonchim")
             rownames(track) <- sample.name
-            write_csv(track, paste0(c(sample.name,'.read_count.csv')))
+            write.csv(track, "${read_count_name}")
 
             # Assign taxonomy 
-            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, multithread=${task.cpus}, tryRC=TRUE)
+            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, multithread=${task.cpus})
 
             # Assign species 
             taxa = addSpecies(taxtab = taxa, refFasta = silva_specie_db)
+
+            spec_count = table(paste(as.data.frame(taxa)[,"Genus"], as.data.frame(taxa)[,"Species"]))
             
             # Write results to disk 
-            write.csv(count(taxa), "$outname")
+            write.csv(spec_count, "$outname")
             """
         }
         
@@ -207,8 +217,6 @@ process dada2 {
 
 process dada2_to_taxo {
     tag "$name"
-
-    conda params.ete_env
 
     label 'ristretto'
 
@@ -220,6 +228,6 @@ process dada2_to_taxo {
         set val(name), file("*.dadataxo.csv") into dada_taxo
     script:
         """
-        dada2taxo.py $dd
+        dada2taxo.py -s $name $dd
         """
 }
