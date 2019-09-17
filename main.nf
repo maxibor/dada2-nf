@@ -90,6 +90,8 @@ process dada2 {
 
     label 'dada'
 
+    errorStrategy 'ignore'
+
     publishDir "${params.results}/dada", mode: 'copy'
 
     input:
@@ -219,6 +221,8 @@ process dada2_to_taxo {
     tag "$name"
 
     label 'ristretto'
+
+    errorStrategy 'ignore'
 
     publishDir "${params.results}/taxo", mode: 'copy'
 

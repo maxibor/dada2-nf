@@ -26,38 +26,29 @@ def _get_args():
 
 def get_taxid(specname):
     taxid_d = ncbi.get_name_translator([specname])
-
     if len(taxid_d.keys()) > 0:
-        specname = taxid_d.keys()[0]
+        specname = list(taxid_d.keys())[0]
         taxid = taxid_d[specname]
-        res = taxid
+        res = taxid[0]
     else:
         res = 0
 
-    # print(specname, res)
     return(res)
 
 
 def dada_to_taxo(dada_df, sample_name):
-    dada_df = dada_df.drop("Unnamed: 0", axis=1)
-    dada_df['specname'] = dada_df.index
-    # print(dada_df)
-    
-    taxdict = {}
-    notNA = pd.Series(dada_df.index, index = dada_df.index).str.contains('NA').index
-    # print(notNA)
-    d = dada_df.drop(notNA, axis=0)
-    # d = dada_df
-    d['TAXID'] = dada_df['specname'].apply(get_taxid)
-    # print(d)
-    for i in pd.Series(d.index):
-        if d['TAXID'][i] not in taxdict.keys():
-            taxdict[d['TAXID'][i]] = d['Freq'][i]
-        else:
-            taxdict[d['TAXID'][i]]  += d['Freq'][i]
-    res = pd.Series(taxdict).to_frame(name=sample_name).fillna(0)
-    print(res)
-    return(res)
+    d = pd.read_csv(dada_df, index_col=0)
+    d = d.rename(columns={'Var1':'Origin','Freq':'Count'})
+    d['Genus'] = d['Origin'].str.split(expand=True)[0]
+    d = d.query('Genus != "NA"')
+    d['Species_suffix'] = d['Origin'].str.split(expand=True)[1]
+    d['Species_suffix'].str.replace('NA','')
+    s = d.query('Species_suffix != "NA"')
+    s['count'] = d['Count'][s.index]
+    s['TAXID'] = d['Origin'].apply(get_taxid)
+    s = s[['TAXID','count']]
+    s = s.set_index('TAXID')
+    return(s)
 
 
 def get_basename(inputFile):
@@ -70,8 +61,6 @@ if __name__ == "__main__":
 
     ncbi = NCBITaxa()
 
-    d = pd.read_csv(INFILE, index_col=1)
+    r = dada_to_taxo(INFILE, SNAME)
 
-    r = dada_to_taxo(d, SNAME)
-
-    r.to_csv(outname)
+    r.to_csv(outname, index=True)
