@@ -55,6 +55,33 @@ Channel
     .ifEmpty { exit 1, "Cannot find any reads matching: ${params.reads}\n" }
 	.set {reads_to_trim}
 
+if (params.silva_db == '' || params.silva_specie_db == ''){
+    println('Downloading SILVA Databases\n')
+    process download_db {
+
+        output:
+            file('silva_nr_v132_train_set.fa') into silva_db
+            file('silva_species_assignment_v132.fa') into silva_species_db
+        script:
+            """
+            wget https://zenodo.org/record/1172783/files/silva_nr_v132_train_set.fa.gz?download=1 -O silva_nr_v132_train_set.fa.gz
+            gunzip silva_nr_v132_train_set.fa.gz
+            wget https://zenodo.org/record/1172783/files/silva_species_assignment_v132.fa.gz?download=1 -O silva_species_assignment_v132.fa.gz
+            gunzip silva_species_assignment_v132.fa.gz
+            """
+    }
+} else {
+    Channel
+        .fromPath(params.silva_db)
+        .set {silva_db}
+    Channel
+        .fromPath(params.silva_specie_db)
+        .set {silva_specie_db}
+}
+
+
+
+
 process AdapterRemoval {
     tag "$name"
 
@@ -96,6 +123,8 @@ process dada2 {
 
     input:
         set val(name), file(fq) from trimmed_reads
+        file(silva) from silva_db
+        file(silva_species) from silva_species_db
     output:
         set val(name), file("*.dada2.csv") into dada_out
         set val(name), file("*.read_count.csv") into dada_read_count_table
@@ -116,8 +145,8 @@ process dada2 {
             fwd = "${fq[0]}"
             rev = "${fq[1]}"
 
-            silva_db = "${params.silva_db}"
-            silva_specie_db = "${params.silva_specie_db}"
+            silva_db = "${silva}"
+            silva_specie_db = "${silva_species}"
 
             # Dereplication            
             derepFs <- derepFastq(fwd, verbose=TRUE)
