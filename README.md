@@ -33,13 +33,13 @@ Example:
 Default: Automatically downloads the database [here](https://doi.org/10.5281/zenodo.1172783)
 
 
-### --silva_specie_db  
+### --silva_species_db  
 
 Silva species db for dada2.
 
 Example:
 
-`--silva_specie_db silva_species_assignment_v132.fa`
+`--silva_species_db silva_species_assignment_v132.fa`
 
  Default: Automatically downloads the database [here](https://doi.org/10.5281/zenodo.1172783)
 
@@ -73,7 +73,7 @@ Settings:
   --phred                       Specifies the fastq quality encoding (33 | 64). Defaults to 33
   --pairedEnd                   Specifies if reads are paired-end (true | false). Default = true
   --silva_db                    Silva database for dada2. Default =
-  --silva_specie_db             Silva species db for dada2. Default =
+  --silva_species_db             Silva species db for dada2. Default =
 
 
 Options:
