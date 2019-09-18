@@ -19,7 +19,7 @@ def helpMessage() {
       --phred                       Specifies the fastq quality encoding (33 | 64). Defaults to ${params.phred}
       --pairedEnd                   Specifies if reads are paired-end (true | false). Default = ${params.pairedEnd}
       --silva_db                    Silva database for dada2. Default = ${params.silva_db}
-      --silva_specie_db             Silva species db for dada2. Default = ${params.silva_specie_db}
+      --silva_species_db             Silva species db for dada2. Default = ${params.silva_species_db}
 
 
     Options:
@@ -44,7 +44,7 @@ summary['Reads'] = params.reads
 summary['phred quality'] = params.phred
 summary['Paired end'] = params.pairedEnd
 summary['Silva DB'] = params.silva_db
-summary['Silva species DB'] = params.silva_specie_db
+summary['Silva species DB'] = params.silva_species_db
 log.info summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
 log.info "========================================="
 
@@ -55,7 +55,7 @@ Channel
     .ifEmpty { exit 1, "Cannot find any reads matching: ${params.reads}\n" }
 	.set {reads_to_trim}
 
-if (params.silva_db == '' || params.silva_specie_db == ''){
+if (params.silva_db == '' || params.silva_species_db == ''){
     println('Downloading SILVA Databases\n')
     process download_db {
 
@@ -75,8 +75,8 @@ if (params.silva_db == '' || params.silva_specie_db == ''){
         .fromPath(params.silva_db)
         .set {silva_db}
     Channel
-        .fromPath(params.silva_specie_db)
-        .set {silva_specie_db}
+        .fromPath(params.silva_species_db)
+        .set {silva_species_db}
 }
 
 
@@ -123,13 +123,15 @@ process dada2 {
 
     input:
         set val(name), file(fq) from trimmed_reads
-        file(silva) from silva_db
-        file(silva_species) from silva_species_db
+        file(silva) from silva_db.first()
+        file(silva_species) from silva_species_db.first()
     output:
-        set val(name), file("*.dada2.csv") into dada_out
+        set val(name), file("*.species_dada2.csv") into dada_out
+        set val(name), file("*.dada2.csv") into dada_classify
         set val(name), file("*.read_count.csv") into dada_read_count_table
     script:
         outname = name+".dada2.csv"
+        species_out = name+".species_dada2.csv"
         read_count_name = name+".read_count.csv"
         if (params.pairedEnd) {
             """
@@ -146,7 +148,7 @@ process dada2 {
             rev = "${fq[1]}"
 
             silva_db = "${silva}"
-            silva_specie_db = "${silva_species}"
+            silva_species_db = "${silva_species}"
 
             # Dereplication            
             derepFs <- derepFastq(fwd, verbose=TRUE)
@@ -177,19 +179,23 @@ process dada2 {
             write.csv(track, "${read_count_name}")
 
             # Assign taxonomy 
-            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, multithread=${task.cpus})
+            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, taxLevels = c("Genus","Species"), multithread=${task.cpus})
+            write.csv(taxa, "$outname")
 
             # Assign species 
-            taxa = addSpecies(taxtab = taxa, refFasta = silva_specie_db)
+            taxa2 = addSpecies(taxtab = taxa, refFasta = silva_species_db)
+
+            rownames(mergers) = mergers[,'sequence']
             
             # Write results to disk 
-            print(taxa)
+            print(taxa2)
 
-            spec_count = table(paste(as.data.frame(taxa)[,"Genus"], as.data.frame(taxa)[,"Species"]))
+            spec = taxa2[,c(ncol(taxa2)-1,ncol(taxa2))]
+            colnames(spec) = c('Genus','Species')
+            spec_abund = merge(mergers, spec, by = 'row.names')[,c('Genus','Species','abundance')]
 
-            print(spec_count)
 
-            write.csv(spec_count, "$outname")
+            write.csv(spec_abund, "$species_out")
             """
         } else {
             """
@@ -205,7 +211,7 @@ process dada2 {
             fwd = "${fq[0]}"
 
             silva_db = "${params.silva_db}"
-            silva_specie_db = "${params.silva_specie_db}"
+            silva_species_db = "${params.silva_species_db}"
 
             # Dereplication            
             derepFs <- derepFastq(fwd, verbose=TRUE)
@@ -230,15 +236,23 @@ process dada2 {
             write.csv(track, "${read_count_name}")
 
             # Assign taxonomy 
-            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, multithread=${task.cpus})
+            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, taxLevels = c("Genus","Species"), multithread=${task.cpus})
+            write.csv(taxa, "$outname")
 
             # Assign species 
-            taxa = addSpecies(taxtab = taxa, refFasta = silva_specie_db)
+            taxa2 = addSpecies(taxtab = taxa, refFasta = silva_species_db)
 
-            spec_count = table(paste(as.data.frame(taxa)[,"Genus"], as.data.frame(taxa)[,"Species"]))
+            rownames(mergers) = mergers[,'sequence']
             
             # Write results to disk 
-            write.csv(spec_count, "$outname")
+            print(taxa2)
+
+            spec = taxa2[,c(ncol(taxa2)-1,ncol(taxa2))]
+            colnames(spec) = c('Genus','Species')
+            spec_abund = merge(mergers, spec, by = 'row.names')[,c('Genus','Species','abundance')]
+
+
+            write.csv(spec_abund, "$species_out")
             """
         }
         

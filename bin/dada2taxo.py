@@ -38,16 +38,16 @@ def get_taxid(specname):
 
 def dada_to_taxo(dada_df, sample_name):
     d = pd.read_csv(dada_df, index_col=0)
-    d = d.rename(columns={'Var1':'Origin','Freq':'Count'})
-    d['Genus'] = d['Origin'].str.split(expand=True)[0]
-    d = d.query('Genus != "NA"')
-    d['Species_suffix'] = d['Origin'].str.split(expand=True)[1]
-    d['Species_suffix'].str.replace('NA','')
-    s = d.query('Species_suffix != "NA"')
-    s['count'] = d['Count'][s.index]
-    s['TAXID'] = d['Origin'].apply(get_taxid)
-    s = s[['TAXID','count']]
-    s = s.set_index('TAXID')
+    d = d.dropna(axis = 0)
+    d['name'] = d['Genus']+' '+d['Species']
+    d['TAXID'] = d['name'].apply(get_taxid)
+    dct = {}
+    for i in list(d.index):
+        if d['TAXID'][i] not in list(dct.keys()):
+            dct[d['TAXID'][i]] = d['abundance'][i]
+        else:
+            dct[d['TAXID'][i]] += d['abundance'][i]
+    s = pd.Series(dct).to_frame(name=sample_name)
     return(s)
 
 
