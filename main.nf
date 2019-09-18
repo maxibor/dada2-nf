@@ -278,3 +278,22 @@ process dada2_to_taxo {
         dada2taxo.py -s $name $dd
         """
 }
+
+process dada_merge {
+
+    label 'ristretto'
+
+    publishDir "${params.results}/merged", mode: 'copy'
+
+    input:
+        file(csv_count) from dada_taxo.collect()
+
+    output:
+        file('dada2_otu_table.csv') into dada_merged
+
+    script:
+        out = "dada2_otu_table.csv"
+        """
+        dada_merge.py -o $out
+        """    
+}
