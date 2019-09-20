@@ -16,12 +16,18 @@ def _get_args():
         default=None,
         help='sample name'
     )
+    parser.add_argument(
+        '-r',
+        default='Species',
+        help='Rank to keep (Genus | Species). Default = Species'
+    )
 
     args = parser.parse_args()
 
     infile = args.dada_csv
     sname = args.s
-    return(infile, sname)
+    rank = args.r
+    return(infile, sname, rank)
 
 
 def get_taxid(specname):
@@ -36,10 +42,14 @@ def get_taxid(specname):
     return(res)
 
 
-def dada_to_taxo(dada_df, sample_name):
+def dada_to_taxo(dada_df, sample_name, rank):
     d = pd.read_csv(dada_df, index_col=0)
-    d = d.dropna(axis = 0)
-    d['name'] = d['Genus']+' '+d['Species']
+    if rank == 'Species':
+        d = d.dropna(axis = 0)
+        d['name'] = d['Genus']+' '+d['Species']
+    elif rank == 'Genus':
+        d['name'] = d['Genus']
+        d = d.dropna(subset=['Genus'], axis=0)
     d['TAXID'] = d['name'].apply(get_taxid)
     dct = {}
     for i in list(d.index):
@@ -56,11 +66,11 @@ def get_basename(inputFile):
 
 
 if __name__ == "__main__":
-    INFILE, SNAME = _get_args()
+    INFILE, SNAME, RANK = _get_args()
     outname = get_basename(INFILE)+".dadataxo.csv"
 
     ncbi = NCBITaxa()
 
-    r = dada_to_taxo(INFILE, SNAME)
+    r = dada_to_taxo(INFILE, SNAME, RANK)
 
     r.to_csv(outname, index=True)

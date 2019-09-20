@@ -19,7 +19,8 @@ def helpMessage() {
       --phred                       Specifies the fastq quality encoding (33 | 64). Defaults to ${params.phred}
       --pairedEnd                   Specifies if reads are paired-end (true | false). Default = ${params.pairedEnd}
       --silva_db                    Silva database for dada2. Default = ${params.silva_db}
-      --silva_species_db             Silva species db for dada2. Default = ${params.silva_species_db}
+      --silva_species_db            Silva species db for dada2. Default = ${params.silva_species_db}
+      --rank                        Taxonomic rank to retain (Genus | Species). Default = ${params.rank}
 
 
     Options:
@@ -45,6 +46,7 @@ summary['phred quality'] = params.phred
 summary['Paired end'] = params.pairedEnd
 summary['Silva DB'] = params.silva_db
 summary['Silva species DB'] = params.silva_species_db
+summary['Rank retained'] = params.rank
 log.info summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
 log.info "========================================="
 
@@ -275,7 +277,7 @@ process dada2_to_taxo {
         set val(name), file("*.dadataxo.csv") into dada_taxo
     script:
         """
-        dada2taxo.py -s $name $dd
+        dada2taxo.py -s $name -r ${params.rank} $dd
         """
 }
 
