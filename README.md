@@ -43,6 +43,16 @@ Example:
 
  Default: Automatically downloads the database [here](https://doi.org/10.5281/zenodo.1172783)
 
+### --rank
+
+Taxonomic rank to keep. Either "Genus" or "Species"
+
+Example:
+
+`--rank Species`
+
+Default: "Genus"
+
 **Please note the following requirements:**
 
 - The path must be enclosed in quotes
@@ -74,6 +84,7 @@ Settings:
   --pairedEnd                   Specifies if reads are paired-end (true | false). Default = true
   --silva_db                    Silva database for dada2. Default =
   --silva_species_db             Silva species db for dada2. Default =
+  --rank                        Taxonomic rank to retain (Genus | Species). Default = Genus
 
 
 Options:
