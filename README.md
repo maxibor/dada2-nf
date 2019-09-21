@@ -68,14 +68,14 @@ Default: "Genus"
 ```
 $ nextflow run maxibor/dada2-nf --help
 N E X T F L O W  ~  version 19.07.0
-Launching `./main.nf` [exotic_kilby] - revision: 299223266d
-megahit-nf: simple Megahit assembler Nextflow pipeline
- Homepage: https://github.com/maxibor/megahit-nf
+Launching `maxibor/dada2-nf` [cheesy_wright] - revision: 8a4d08f663 [master]
+dada2: simple dada2 16s classifier pipeline
+ Homepage: https://github.com/maxibor/dada2-nf
  Author: Maxime Borry <borry@shh.mpg.de>
 =========================================
 Usage:
 The typical command for running the pipeline is as follows:
-nextflow run maxibor/megahit-nf --reads '/path/to/paired_end_reads_*.{1,2}.fastq.gz'
+nextflow run maxibor/dada2-nf --reads '/path/to/paired_end_reads_*.{1,2}.fastq.gz'
 Mandatory arguments:
   --reads                       Path to input data (must be surrounded with quotes)
 
@@ -83,7 +83,7 @@ Settings:
   --phred                       Specifies the fastq quality encoding (33 | 64). Defaults to 33
   --pairedEnd                   Specifies if reads are paired-end (true | false). Default = true
   --silva_db                    Silva database for dada2. Default =
-  --silva_species_db             Silva species db for dada2. Default =
+  --silva_species_db            Silva species db for dada2. Default =
   --rank                        Taxonomic rank to retain (Genus | Species). Default = Genus
 
 
