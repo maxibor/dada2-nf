@@ -20,4 +20,4 @@ install:
   - source activate dada2-nf
 
 script:
-  - nextflow run main.nf -profile test
+  - nextflow run main.nf -profile conda,test
