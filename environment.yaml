@@ -10,3 +10,4 @@ dependencies:
   - pandas
   - numpy 
   - ete3
+  - nextflow

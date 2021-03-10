@@ -87,8 +87,6 @@ if (params.silva_db == '' || params.silva_species_db == ''){
 process AdapterRemoval {
     tag "$name"
 
-    label 'adaprem'
-
     input:
         set val(name), file(reads) from reads_to_trim
 
