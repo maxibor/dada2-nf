@@ -18,6 +18,7 @@ def helpMessage() {
     Settings:
       --phred                       Specifies the fastq quality encoding (33 | 64). Defaults to ${params.phred}
       --pairedEnd                   Specifies if reads are paired-end (true | false). Default = ${params.pairedEnd}
+      --collapse                    Merge forward and reverse reads. Default = ${params.collapse}
       --silva_db                    Silva database for dada2. Default = ${params.silva_db}
       --silva_species_db            Silva species db for dada2. Default = ${params.silva_species_db}
       --rank                        Taxonomic rank to retain (Genus | Species). Default = ${params.rank}
@@ -95,21 +96,25 @@ process AdapterRemoval {
         file("*.settings") into adapter_removal_results
 
     script:
-        out1 = name+".pair1.trimmed.fastq"
-        out2 = name+".pair2.trimmed.fastq"
-        se_out = name+".trimmed.fastq"
-        non_col1 = name+".discarded.1.fq"
-        non_col2 = name+".discarded.2.fq"
         settings = name+".settings"
-        if (params.pairedEnd){
+        if (params.pairedEnd && !params.collapse){
+            out1 = name+".pair1.trimmed.fastq"
+            out2 = name+".pair2.trimmed.fastq"
             """
-            AdapterRemoval --basename $name --file1 ${reads[0]} --file2 ${reads[1]} --trimns --trimqualities --maxns 0 --minquality 20 --minlength 30 --output1 $out1 --output2 $out2 --threads ${task.cpus} --qualitybase ${params.phred} --settings $settings
+            AdapterRemoval --basename $name --file1 ${reads[0]} --file2 ${reads[1]} --trimns --trimqualities --minquality 20 --minlength 30 --output1 $out1 --output2 $out2 --threads ${task.cpus} --qualitybase ${params.phred} --settings $settings
             """
-        } else {  
+        } else if (params.pairedEnd && params.collapse) {
+            se_out = name+".trimmed.fastq"
             """
-            AdapterRemoval --basename $name --file1 ${reads[0]} --trimns --trimqualities --minquality 20 --maxns 0 --minlength 30 --output1 $se_out --threads ${task.cpus} --qualitybase ${params.phred} --settings $settings
+            AdapterRemoval --basename $name --file1 ${reads[0]} --file2 ${reads[1]} --trimns --trimqualities --minquality 20 --minlength 30 --collapse --outputcollapsed $se_out --threads ${task.cpus} --qualitybase ${params.phred} --settings $settings
             """
-        }      
+        } 
+        else {
+            se_out = name+".trimmed.fastq"
+            """
+            AdapterRemoval --basename $name --file1 ${reads[0]} --trimns --trimqualities --minquality 20 --minlength 30 --output1 $se_out --threads ${task.cpus} --qualitybase ${params.phred} --settings $settings
+            """
+        }           
 }
 
 process dada2 {
@@ -131,7 +136,64 @@ process dada2 {
         outname = name+".dada2.csv"
         species_out = name+".species_dada2.csv"
         read_count_name = name+".read_count.csv"
-        if (params.pairedEnd) {
+         if (!params.pairedEnd || params.collapse)  {
+            """
+            #!/usr/bin/env Rscript
+            
+            library(dada2)
+            library(plyr)
+
+            setwd(".")
+
+            sample.name = "$name"
+
+            fwd = "${fq[0]}"
+
+            silva_db = "${params.silva_db}"
+            silva_species_db = "${params.silva_species_db}"
+
+            # Dereplication            
+            derepFs <- derepFastq(fwd, verbose=TRUE)
+
+            # Learning error rate
+            err_forward_reads <- learnErrors(derepFs, multithread = ${task.cpus})
+
+            # Sample Inference
+            dadaFs <- dada(derepFs, err=err_forward_reads, multithread=${task.cpus})
+
+            # Make sequence table
+            seqtab <- makeSequenceTable(dadaFs)
+
+            # Remove chimeras
+            seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=${task.cpus}, verbose=TRUE)
+
+             # Track read numbers
+            getN <- function(x) sum(getUniques(x))
+            track <- cbind(getN(dadaFs), rowSums(seqtab.nochim))
+            colnames(track) <- c("denoisedF", "nonchim")
+            rownames(track) <- sample.name
+            write.csv(track, "${read_count_name}")
+
+            # Assign taxonomy 
+            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, taxLevels = c("Genus","Species"), multithread=${task.cpus})
+            write.csv(taxa, "$outname")
+
+            # Assign species 
+            taxa2 = addSpecies(taxtab = taxa, refFasta = silva_species_db)
+
+            rownames(mergers) = mergers[,'sequence']
+            
+            # Write results to disk 
+            print(taxa2)
+
+            spec = taxa2[,c(ncol(taxa2)-1,ncol(taxa2))]
+            colnames(spec) = c('Genus','Species')
+            spec_abund = merge(mergers, spec, by = 'row.names')[,c('Genus','Species','abundance')]
+
+
+            write.csv(spec_abund, "$species_out")
+            """
+        } else {
             """
             #!/usr/bin/env Rscript
             
@@ -173,63 +235,6 @@ process dada2 {
             getN <- function(x) sum(getUniques(x))
             track <- cbind(getN(dadaFs), getN(dadaRs), getN(mergers), rowSums(seqtab.nochim))
             colnames(track) <- c("denoisedF", "denoisedR", "merged", "nonchim")
-            rownames(track) <- sample.name
-            write.csv(track, "${read_count_name}")
-
-            # Assign taxonomy 
-            taxa <- assignTaxonomy(seqtab.nochim, silva_db, tryRC = TRUE, taxLevels = c("Genus","Species"), multithread=${task.cpus})
-            write.csv(taxa, "$outname")
-
-            # Assign species 
-            taxa2 = addSpecies(taxtab = taxa, refFasta = silva_species_db)
-
-            rownames(mergers) = mergers[,'sequence']
-            
-            # Write results to disk 
-            print(taxa2)
-
-            spec = taxa2[,c(ncol(taxa2)-1,ncol(taxa2))]
-            colnames(spec) = c('Genus','Species')
-            spec_abund = merge(mergers, spec, by = 'row.names')[,c('Genus','Species','abundance')]
-
-
-            write.csv(spec_abund, "$species_out")
-            """
-        } else {
-            """
-            #!/usr/bin/env Rscript
-            
-            library(dada2)
-            library(plyr)
-
-            setwd(".")
-
-            sample.name = "$name"
-
-            fwd = "${fq[0]}"
-
-            silva_db = "${params.silva_db}"
-            silva_species_db = "${params.silva_species_db}"
-
-            # Dereplication            
-            derepFs <- derepFastq(fwd, verbose=TRUE)
-
-            # Learning error rate
-            err_forward_reads <- learnErrors(derepFs, multithread = ${task.cpus})
-
-            # Sample Inference
-            dadaFs <- dada(derepFs, err=err_forward_reads, multithread=${task.cpus})
-
-            # Make sequence table
-            seqtab <- makeSequenceTable(dadaFs)
-
-            # Remove chimeras
-            seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=${task.cpus}, verbose=TRUE)
-
-             # Track read numbers
-            getN <- function(x) sum(getUniques(x))
-            track <- cbind(getN(dadaFs), rowSums(seqtab.nochim))
-            colnames(track) <- c("denoisedF", "nonchim")
             rownames(track) <- sample.name
             write.csv(track, "${read_count_name}")
 
